@@ -7,16 +7,8 @@ app = "warp-app"
 primary_region = "iad"
 
 [[services]]
-  protocol = "tcp"
+  protocol = ""
   internal_port = 7761
-  auto_stop_machines = true
-  auto_start_machines = true
-  min_machines_running = 1
-
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 3
