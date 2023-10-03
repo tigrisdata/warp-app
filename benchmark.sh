@@ -27,9 +27,11 @@ FLY_CMD=fly
 # FLy machine sizing
 VM_SIZE="shared-cpu-4x"
 VM_MEMORY="2048"
+VOLUME_SIZE="1"
+VOLUME_NAME="warp_app_vol"
 
 # The number of nodes to create
-NUM_NODES=3
+NUM_NODES=5
 
 # The workload parameters
 REGION="iad"
@@ -38,6 +40,8 @@ DURATION=1m
 OBJECT_SIZE=4KB
 BUCKET="test-bucket"
 S3_ENDPOINT="dev-tigris-os.fly.dev"
+INSECURE="false"
+RANDOMIZE_OBJECT_SIZE="false"
 
 # check for required binaries
 for prog in $FLY_CMD jq openssl; do
@@ -56,9 +60,11 @@ Usage: $(basename "$0") [-r|-n|-c|-o|-e|-d|-s|-h]
 r             - region to run the benchmark in (default: $REGION)
 n             - number of warp client nodes to use to run the benchmark (default: $NUM_NODES)
 c             - per warp client concurrency (default: $CONCURRENCY)
-o             - object size to use (default: $OBJECT_SIZE)
+o             - objects size (default: $OBJECT_SIZE)
 e             - s3 endpoint to use (default: $S3_ENDPOINT)
 d             - duration of the benchmark (default: $DURATION)
+i             - use insecure connections to the s3 endpoint (default: $INSECURE)
+f             - randomize size of objects up to a max defined by [-o] (default: $RANDOMIZE_OBJECT_SIZE)
 s             - shutdown the warp nodes
 h             - help
 EOF
@@ -78,6 +84,24 @@ fetch_instance_id() {
     echo "$node_id"
 }
 
+# --- creates the volume ---
+create_volume() {
+    local volume_info=
+
+    volume_info=$($FLY_CMD volumes create "$VOLUME_NAME" --region "$REGION" --size "$VOLUME_SIZE" --yes -j)
+
+    if [[ $(echo "$volume_info" | jq .id -r) != "vol_"* ]]; then
+        fatal "Failed to create volume"
+    fi
+
+    if [[ $(echo "$volume_info" | jq .zone -r) == "null" ]]; then
+        fatal "Failed to fetch zone info for volume"
+    fi
+
+    # return the volume id and zone
+    echo "$volume_info"
+}
+
 # --- add nodes ---
 create_machines() {
     NODE_PREFIX="${NODE_PREFIX}${REGION}-"
@@ -92,12 +116,21 @@ create_machines() {
             continue
         fi
 
-        info "Creating node... (name: $node_name, vm-size: $VM_SIZE)"
+        # create volume
+        info "Creating volume... (name: $VOLUME_NAME, region: $REGION, size: $VOLUME_SIZE)"
+        local volume_info='' volume_id='' volume_zone=''
+
+        volume_info=$(create_volume)
+        volume_id=$(echo "$volume_info" | jq .id -r)
+        volume_zone=$(echo "$volume_info" | jq .zone -r)
+
+        info "Creating node... (name: $node_name, vm-size: $VM_SIZE, zone: $volume_zone)"
         $FLY_CMD machine run . \
             --name "$node_name" \
             --vm-size "$VM_SIZE" \
             --vm-memory "$VM_MEMORY" \
-            --region "$REGION"
+            --region "$REGION" \
+            --volume "$volume_id:/data"
     done
 }
 
@@ -106,6 +139,11 @@ destroy_machines() {
     for m in $($FLY_CMD machine list -j | jq '.[] | .id' -r); do
         info "Destroying node... (name: $m)"
         $FLY_CMD machine rm "$m" --force
+    done
+
+    for v in $($FLY_CMD volumes list -j | jq '.[] | .id' -r); do
+        info "Destroying volume... (name: $v)"
+        $FLY_CMD volume destroy "$v" --force
     done
 }
 
@@ -119,15 +157,25 @@ run_workload() {
     # fetch the access key and secret key
     eval "$(fly machine exec $master_node_id 'env' | grep -E 'TIGRIS_ACCESS_KEY_ID|TIGRIS_SECRET_ACCESS_KEY')"
 
-    info "Running workload (endpoint: $S3_ENDPOINT, bucket: $BUCKET, object_size: $OBJECT_SIZE, duration: $DURATION, concurrency: $CONCURRENCY)..."
+    local tls_arg=''
+    if [[ "$INSECURE" == "false" ]]; then
+        tls_arg="--tls"
+    fi
+
+    local obj_rand_size_arg=''
+    if [[ "$RANDOMIZE_OBJECT_SIZE" == "true" ]]; then
+        obj_rand_size_arg="--obj.randsize"
+    fi
+
+    info "Running workload (endpoint: $S3_ENDPOINT, bucket: $BUCKET, max object_size: $OBJECT_SIZE, duration: $DURATION, concurrency: $CONCURRENCY)..."
 
     $FLY_CMD ssh console \
         -A "$master_node_id.vm.$FLY_APP_NAME.internal" \
-        -C "/warp get --warp-client=$client_nodes --analyze.v --host=$S3_ENDPOINT --access-key=$TIGRIS_ACCESS_KEY_ID --secret-key=$TIGRIS_SECRET_ACCESS_KEY --bucket=$BUCKET --tls --obj.size=$OBJECT_SIZE --duration=$DURATION --concurrent=$CONCURRENCY"
+        -C "/warp get --warp-client=$client_nodes --analyze.v --host=$S3_ENDPOINT --access-key=$TIGRIS_ACCESS_KEY_ID --secret-key=$TIGRIS_SECRET_ACCESS_KEY --bucket=$BUCKET $tls_arg --obj.size=$OBJECT_SIZE $obj_rand_size_arg --duration=$DURATION --concurrent=$CONCURRENCY"
 }
 
 # --- main ---
-while getopts "r:n:c:o:e:d:sh" opt; do
+while getopts "r:n:c:o:e:d:ifsh" opt; do
     case "$opt" in
     r)
         REGION="$OPTARG"
@@ -146,6 +194,12 @@ while getopts "r:n:c:o:e:d:sh" opt; do
         ;;
     d)
         DURATION="$OPTARG"
+        ;;
+    i)
+        INSECURE="true"
+        ;;
+    f)
+        RANDOMIZE_OBJECT_SIZE="true"
         ;;
     s)
         destroy_machines
