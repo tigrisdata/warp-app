@@ -42,6 +42,8 @@ BUCKET="test-bucket"
 S3_ENDPOINT="dev-tigris-os.fly.dev"
 INSECURE="false"
 RANDOMIZE_OBJECT_SIZE="false"
+ACCESS_KEY=""
+SECRET_KEY=""
 
 # check for required binaries
 for prog in $FLY_CMD jq openssl; do
@@ -56,14 +58,17 @@ usage() {
     cat <<EOF
 A utility to run S3 benchmarks on Fly.io
 
-Usage: $(basename "$0") [-r|-n|-c|-o|-e|-d|-s|-h]
+Usage: $(basename "$0") [-r|-n|-c|-o|-e|-a|-p|-b|-d|-s|-h]
 r             - region to run the benchmark in (default: $REGION)
 n             - number of warp client nodes to use to run the benchmark (default: $NUM_NODES)
 c             - per warp client concurrency (default: $CONCURRENCY)
 o             - objects size (default: $OBJECT_SIZE)
-e             - s3 endpoint to use (default: $S3_ENDPOINT)
+e             - S3 endpoint to use (default: $S3_ENDPOINT)
+a             - S3 access key
+p             - S3 secret key
+b             - S3 bucket to use (default: $BUCKET)
 d             - duration of the benchmark (default: $DURATION)
-i             - use insecure connections to the s3 endpoint (default: $INSECURE)
+i             - use insecure connections to the S3 endpoint (default: $INSECURE)
 f             - randomize size of objects up to a max defined by [-o] (default: $RANDOMIZE_OBJECT_SIZE)
 s             - shutdown the warp nodes
 h             - help
@@ -155,7 +160,9 @@ run_workload() {
     client_nodes=$(fly machines list -j | jq '[.[] | select(.name != "'${NODE_PREFIX}0'" ) | (.id + ".vm.'${FLY_APP_NAME}'.internal")] | join(",")' -r)
 
     # fetch the access key and secret key
-    eval "$(fly machine exec $master_node_id 'env' | grep -E 'TIGRIS_ACCESS_KEY_ID|TIGRIS_SECRET_ACCESS_KEY')"
+    if [[ -z "$ACCESS_KEY" || -z "$SECRET_KEY" ]]; then
+        eval "$(fly machine exec $master_node_id 'env' | grep -E 'ACCESS_KEY|SECRET_KEY')"
+    fi
 
     local tls_arg=''
     if [[ "$INSECURE" == "false" ]]; then
@@ -171,11 +178,11 @@ run_workload() {
 
     $FLY_CMD ssh console \
         -A "$master_node_id.vm.$FLY_APP_NAME.internal" \
-        -C "/warp get --warp-client=$client_nodes --analyze.v --host=$S3_ENDPOINT --access-key=$TIGRIS_ACCESS_KEY_ID --secret-key=$TIGRIS_SECRET_ACCESS_KEY --bucket=$BUCKET $tls_arg --obj.size=$OBJECT_SIZE $obj_rand_size_arg --duration=$DURATION --concurrent=$CONCURRENCY"
+        -C "/warp get --warp-client=$client_nodes --analyze.v --host=$S3_ENDPOINT --access-key=$ACCESS_KEY --secret-key=$SECRET_KEY --bucket=$BUCKET $tls_arg --obj.size=$OBJECT_SIZE $obj_rand_size_arg --duration=$DURATION --concurrent=$CONCURRENCY"
 }
 
 # --- main ---
-while getopts "r:n:c:o:e:d:ifsh" opt; do
+while getopts "r:n:c:o:e:a:p:b:d:ifsh" opt; do
     case "$opt" in
     r)
         REGION="$OPTARG"
@@ -191,6 +198,15 @@ while getopts "r:n:c:o:e:d:ifsh" opt; do
         ;;
     e)
         S3_ENDPOINT="$OPTARG"
+        ;;
+    a)
+        ACCESS_KEY="$OPTARG"
+        ;;
+    p)
+        SECRET_KEY="$OPTARG"
+        ;;
+    b)
+        BUCKET="$OPTARG"
         ;;
     d)
         DURATION="$OPTARG"
