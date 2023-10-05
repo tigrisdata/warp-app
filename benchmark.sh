@@ -148,7 +148,7 @@ destroy_machines() {
 
     for v in $($FLY_CMD volumes list -j | jq '.[] | .id' -r); do
         info "Destroying volume... (name: $v)"
-        $FLY_CMD volume destroy "$v" --force
+        $FLY_CMD volume destroy "$v" -y
     done
 }
 
