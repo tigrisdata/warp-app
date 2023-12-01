@@ -14,7 +14,7 @@ The warp-app is deployed in AWS in the following environments:
 
 - euc1: eu-central-1
 - ue1: us-east-1
-- uw2: us-west-2
+- uw1: us-west-1
 
 To run warp connect to one of the environments first:
 
