@@ -27,17 +27,19 @@ $ ./benchmark.sh -h
 A utility to run S3 benchmarks on Fly.io
 
 Usage: benchmark.sh [-r|-n|-c|-o|-e|-a|-p|-b|-d|-s|-h]
-r             - region to run the benchmark in (default: iad)
-n             - number of warp client nodes to use to run the benchmark (default: 5)
+r             - regions to run the benchmark in (default: iad)
+n             - number of warp client nodes per region to run the benchmark (default: 2)
 c             - per warp client concurrency (default: 10)
 o             - objects size (default: 4KB)
-e             - S3 endpoint to use (default: dev-tigris-os.fly.dev)
+e             - S3 endpoint to use (default: idev-storage.fly.tigris.dev)
 a             - S3 access key
 p             - S3 secret key
 b             - S3 bucket to use (default: test-bucket)
 d             - duration of the benchmark (default: 1m)
+t             - type of workload to run (get|mixed|list|stat default: get)
 i             - use insecure connections to the S3 endpoint (default: false)
 f             - randomize size of objects up to a max defined by [-o] (default: false)
+g             - use range requests (default: false)
 s             - shutdown the warp nodes
 h             - help
 ```
@@ -50,17 +52,17 @@ To run the benchmark with default options simply run it as follows:
 ./benchmark.sh -a <access_key> -p <secret_key> -b test-bucket
 ```
 
-This will benchmark the object storage service at `https://dev-tigris-os.fly.dev` with the following parameters:
+This will benchmark the object storage service at `https://idev-storage.fly.tigris.dev` with the following parameters:
 
-- region: `iad`
-- number of warp client nodes: `5`
+- region: `iad,ord,sjc`
+- number of warp client nodes per region: `2`
 - concurrency: `10`
 - object size: `4KB`
 - duration: `1m`
 - bucket: `test-bucket`
 
-There will be a total of `5` Fly machines created. One of them will be the server coordianting
-the benchmark and the other 4 will be the clients running the actual benchmark.
+There will be a total of `7` Fly machines created. One of them will be the server coordianting
+the benchmark and the other `6` will be the clients running the actual benchmark (2 per region).
 
 Each of the clients will have `10` concurrent connections to upload and download the objects.
 
@@ -74,8 +76,6 @@ will attempt to run `10` concurrent downloads per client. In the default configu
 shown above, this will result in 40 concurrent downloads.
 
 ## Configuring the benchmark
-
-By default warp uploads random data.
 
 ### Object Size
 
@@ -113,55 +113,39 @@ When benchmarks have finished an analysis will be shown.
 
 ```bash
 $ ./benchmark.sh -a <access_key> -p <secret_key> -b test-bucket
-[INFO]  Checking if node exists... (name: warp-node-iad-0, vm-size: shared-cpu-4x)
-[INFO]  Checking if node exists... (name: warp-node-iad-1, vm-size: shared-cpu-4x)
-[INFO]  Checking if node exists... (name: warp-node-iad-2, vm-size: shared-cpu-4x)
-[INFO]  Checking if node exists... (name: warp-node-iad-3, vm-size: shared-cpu-4x)
-[INFO]  Checking if node exists... (name: warp-node-iad-4, vm-size: shared-cpu-4x)
-[INFO]  Running workload (endpoint: dev-tigris-os.fly.dev, bucket: test-bucket, max object_size: 4KB, duration: 1m, concurrency: 10)...
 
 ----------------------------------------
-Operation: PUT (10000). Ran 11s. Size: 4000 bytes. Concurrency: 40. Warp Instances: 4.
+Operation: PUT (15000). Ran 27s. Size: 4000 bytes. Concurrency: 60. Warp Instances: 6.
 
-Requests considered: 9727:
- * Avg: 44ms, 50%: 39ms, 90%: 63ms, 99%: 89ms, Fastest: 22ms, Slowest: 139ms, StdDev: 15ms
+Requests considered: 10659:
+ * Avg: 85ms, 50%: 80ms, 90%: 127ms, 99%: 170ms, Fastest: 26ms, Slowest: 511ms, StdDev: 37ms
 
 Throughput:
-* Average: 3.48 MiB/s, 912.01 obj/s
+* Average: 2.68 MiB/s, 701.62 obj/s
 
-Throughput, split into 10 x 1s:
- * Fastest: 3.7MiB/s, 981.23 obj/s (1s, starting 00:55:12 UTC)
- * 50% Median: 3.5MiB/s, 920.27 obj/s (1s, starting 00:55:09 UTC)
- * Slowest: 3.3MiB/s, 855.88 obj/s (1s, starting 00:55:04 UTC)
+Throughput, split into 15 x 1s:
+ * Fastest: 3.2MiB/s, 837.01 obj/s (1s, starting 03:55:27 UTC)
+ * 50% Median: 2.8MiB/s, 727.32 obj/s (1s, starting 03:55:33 UTC)
+ * Slowest: 2.2MiB/s, 577.45 obj/s (1s, starting 03:55:38 UTC)
 
 ----------------------------------------
-Operation: GET (261320). Ran 1m0s. Size: 4000 bytes. Concurrency: 40. Warp Instances: 4.
+Operation: GET (1275209). Ran 1m0s. Size: 4000 bytes. Concurrency: 60. Warp Instances: 6.
 
-Requests considered: 261081:
- * Avg: 9ms, 50%: 8ms, 90%: 13ms, 99%: 40ms, Fastest: 3ms, Slowest: 121ms, StdDev: 6ms
- * TTFB: Avg: 9ms, Best: 3ms, 25th: 6ms, Median: 7ms, 75th: 9ms, 90th: 13ms, 99th: 40ms, Worst: 121ms StdDev: 6ms
- * First Access: Avg: 29ms, 50%: 23ms, 90%: 50ms, 99%: 68ms, Fastest: 11ms, Slowest: 120ms, StdDev: 13ms
- * First Access TTFB: Avg: 29ms, Best: 11ms, 25th: 19ms, Median: 23ms, 75th: 35ms, 90th: 50ms, 99th: 67ms, Worst: 120ms StdDev: 13ms
- * Last Access: Avg: 8ms, 50%: 7ms, 90%: 11ms, 99%: 19ms, Fastest: 3ms, Slowest: 49ms, StdDev: 3ms
- * Last Access TTFB: Avg: 8ms, Best: 3ms, 25th: 7ms, Median: 7ms, 75th: 9ms, 90th: 11ms, 99th: 19ms, Worst: 49ms StdDev: 3ms
+Requests considered: 1274705:
+ * Avg: 3ms, 50%: 2ms, 90%: 5ms, 99%: 8ms, Fastest: 1ms, Slowest: 422ms, StdDev: 2ms
+ * TTFB: Avg: 3ms, Best: 1ms, 25th: 2ms, Median: 2ms, 75th: 3ms, 90th: 5ms, 99th: 7ms, Worst: 422ms StdDev: 2ms
+ * First Access: Avg: 3ms, 50%: 2ms, 90%: 5ms, 99%: 9ms, Fastest: 1ms, Slowest: 40ms, StdDev: 2ms
+ * First Access TTFB: Avg: 3ms, Best: 1ms, 25th: 2ms, Median: 2ms, 75th: 5ms, 90th: 5ms, 99th: 8ms, Worst: 40ms StdDev: 2ms
+ * Last Access: Avg: 3ms, 50%: 2ms, 90%: 5ms, 99%: 8ms, Fastest: 1ms, Slowest: 33ms, StdDev: 2ms
+ * Last Access TTFB: Avg: 3ms, Best: 1ms, 25th: 2ms, Median: 2ms, 75th: 5ms, 90th: 5ms, 99th: 8ms, Worst: 33ms StdDev: 2ms
 
 Throughput:
-* Average: 16.62 MiB/s, 4356.26 obj/s
+* Average: 81.07 MiB/s, 21253.28 obj/s
 
 Throughput, split into 59 x 1s:
- * Fastest: 19.6MiB/s, 5141.23 obj/s (1s, starting 00:55:55 UTC)
- * 50% Median: 18.2MiB/s, 4759.79 obj/s (1s, starting 00:55:47 UTC)
- * Slowest: 5.9MiB/s, 1544.59 obj/s (1s, starting 00:55:17 UTC)
-warp: Requesting stage cleanup start...
-warp: Client [fdaa:2:3d6:a7b:1a7:1c7:37ea:2]:7761: Requested stage cleanup start...
-warp: Client [fdaa:2:3d6:a7b:9d35:193e:25d7:2]:7761: Requested stage cleanup start...
-warp: Client [fdaa:2:3d6:a7b:ab9:e00d:d7c2:2]:7761: Requested stage cleanup start...
-warp: Client [fdaa:2:3d6:a7b:1b7:467d:498d:2]:7761: Requested stage cleanup start...
-warp: Client [fdaa:2:3d6:a7b:1b7:467d:498d:2]:7761: Finished stage cleanup...
-warp: Client [fdaa:2:3d6:a7b:ab9:e00d:d7c2:2]:7761: Finished stage cleanup...
-warp: Client [fdaa:2:3d6:a7b:1a7:1c7:37ea:2]:7761: Finished stage cleanup...
-warp: Client [fdaa:2:3d6:a7b:9d35:193e:25d7:2]:7761: Finished stage cleanup...
-warp: Cleanup done.
+ * Fastest: 83.3MiB/s, 21837.10 obj/s (1s, starting 03:56:10 UTC)
+ * 50% Median: 81.3MiB/s, 21307.31 obj/s (1s, starting 03:56:23 UTC)
+ * Slowest: 76.6MiB/s, 20069.42 obj/s (1s, starting 03:56:08 UTC)
 ```
 
 All analysis will be done on a reduced part of the full data.
