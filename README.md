@@ -26,12 +26,12 @@ There are several configuration options available that you can see below:
 $ ./benchmark.sh -h
 A utility to run S3 benchmarks on Fly.io
 
-Usage: benchmark.sh [-r|-n|-c|-o|-e|-a|-p|-b|-d|-s|-h]
-r             - regions to run the benchmark in (default: iad)
+Usage: benchmark.sh [-r|-n|-c|-o|-e|-a|-p|-b|-d|-t|-f|-g-s|-h]
+r             - regions to run the benchmark in (default: iad,ord,sjc)
 n             - number of warp client nodes per region to run the benchmark (default: 2)
 c             - per warp client concurrency (default: 10)
 o             - objects size (default: 4KB)
-e             - S3 endpoint to use (default: idev-storage.fly.tigris.dev)
+e             - S3 endpoint to use (default: t3.storage.dev)
 a             - S3 access key
 p             - S3 secret key
 b             - S3 bucket to use (default: test-bucket)
@@ -40,6 +40,7 @@ t             - type of workload to run (get|mixed|list|stat default: get)
 i             - use insecure connections to the S3 endpoint (default: false)
 f             - randomize size of objects up to a max defined by [-o] (default: false)
 g             - use range requests (default: false)
+z             - number of objects to create (default: 1000)
 s             - shutdown the warp nodes
 h             - help
 ```

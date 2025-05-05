@@ -45,13 +45,14 @@ CONCURRENCY=10
 DURATION=1m
 OBJECT_SIZE=4KB
 BUCKET="test-bucket"
-S3_ENDPOINT="idev-storage.fly.tigris.dev"
+S3_ENDPOINT="t3.storage.dev"
 INSECURE="false"
 RANDOMIZE_OBJECT_SIZE="false"
 RANGE_REQUESTS="false"
 ACCESS_KEY=""
 SECRET_KEY=""
 WORKLOAD_TYPE="get"
+NUM_OBJECTS=1000
 
 # check for required binaries
 for prog in $FLY_CMD jq openssl; do
@@ -66,7 +67,7 @@ usage() {
     cat <<EOF
 A utility to run S3 benchmarks on Fly.io
 
-Usage: $(basename "$0") [-r|-n|-c|-o|-e|-a|-p|-b|-d|-s|-h]
+Usage: $(basename "$0") [-r|-n|-c|-o|-e|-a|-p|-b|-d|-t|-f|-g-s|-h]
 r             - regions to run the benchmark in (default: $REGIONS)
 n             - number of warp client nodes per region to run the benchmark (default: $NUM_NODES)
 c             - per warp client concurrency (default: $CONCURRENCY)
@@ -80,6 +81,7 @@ t             - type of workload to run (get|mixed|list|stat default: $WORKLOAD_
 i             - use insecure connections to the S3 endpoint (default: $INSECURE)
 f             - randomize size of objects up to a max defined by [-o] (default: $RANDOMIZE_OBJECT_SIZE)
 g             - use range requests (default: $RANGE_REQUESTS)
+z             - number of objects to create (default: $NUM_OBJECTS)
 s             - shutdown the warp nodes
 h             - help
 EOF
@@ -204,15 +206,15 @@ run_workload() {
         obj_range_get_arg="--range"
     fi
 
-    info "Running workload (endpoint: $S3_ENDPOINT, bucket: $BUCKET, max object_size: $OBJECT_SIZE, duration: $DURATION, concurrency: $CONCURRENCY)..."
+    info "Running workload (endpoint: $S3_ENDPOINT, bucket: $BUCKET, max object_size: $OBJECT_SIZE, num_objects: $NUM_OBJECTS, duration: $DURATION, concurrency: $CONCURRENCY)..."
 
     $FLY_CMD ssh console \
         -A "$master_node_id.vm.$FLY_APP_NAME.internal" \
-        -C "/warp $WORKLOAD_TYPE --warp-client=$client_nodes --analyze.v --host=$S3_ENDPOINT --access-key=$ACCESS_KEY --secret-key=$SECRET_KEY --bucket=$BUCKET $tls_arg --obj.size=$OBJECT_SIZE $obj_rand_size_arg $obj_range_get_arg --duration=$DURATION --concurrent=$CONCURRENCY"
+        -C "/warp $WORKLOAD_TYPE --warp-client=$client_nodes --analyze.v --host=$S3_ENDPOINT --access-key=$ACCESS_KEY --secret-key=$SECRET_KEY --bucket=$BUCKET $tls_arg --obj.size=$OBJECT_SIZE $obj_rand_size_arg $obj_range_get_arg --objects=$NUM_OBJECTS --duration=$DURATION --concurrent=$CONCURRENCY"
 }
 
 # --- main ---
-while getopts "r:n:c:o:e:a:p:b:d:t:ifgsh" opt; do
+while getopts "r:n:c:o:e:a:p:b:d:t:z:ifgsh" opt; do
     case "$opt" in
     r)
         REGIONS="$OPTARG"
@@ -252,6 +254,9 @@ while getopts "r:n:c:o:e:a:p:b:d:t:ifgsh" opt; do
         ;;
     g)
         RANGE_REQUESTS="true"
+        ;;
+    z)
+        NUM_OBJECTS="$OPTARG"
         ;;
     s)
         destroy_machines
